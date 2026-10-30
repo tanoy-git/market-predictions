@@ -33,6 +33,7 @@ const LIVE_BENCHMARKS: AssetMetadata[] = [
   { ticker: "ETH-USD", name: "Ethereum USD", asset_class: "Crypto", exchange: "Global" },
   { ticker: "SOL-USD", name: "Solana USD", asset_class: "Crypto", exchange: "Global" },
   // Forex
+  { ticker: "USDBDT=X", name: "USD/BDT (US Dollar to Bangladeshi Taka)", asset_class: "Forex", exchange: "FX", currency: "BDT" },
   { ticker: "EURUSD=X", name: "EUR/USD", asset_class: "Forex", exchange: "FX" },
   { ticker: "GBPUSD=X", name: "GBP/USD", asset_class: "Forex", exchange: "FX" },
   { ticker: "USDJPY=X", name: "USD/JPY", asset_class: "Forex", exchange: "FX" },
@@ -314,6 +315,21 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
           title="Predict Silver Futures"
         >
           SI=F (Silver)
+        </button>
+
+        {/* USD to BDT Prediction Button */}
+        <button
+          onClick={() => onSelectTicker("USDBDT=X")}
+          disabled={isLoading}
+          className={`px-3 py-1 rounded-md text-xs font-mono shrink-0 transition flex items-center space-x-1.5 border ${
+            currentTicker === "USDBDT=X"
+              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/80 shadow-md shadow-emerald-500/20 font-black ring-1 ring-emerald-400/40"
+              : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400/90 hover:text-emerald-300 border-emerald-500/40"
+          }`}
+          title="Predict USD to BDT (US Dollar to Bangladeshi Taka)"
+        >
+          <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+          <span>🇧🇩 USD/BDT</span>
         </button>
 
         {/* Standard Asset Chips */}
