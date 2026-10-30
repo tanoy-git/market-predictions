@@ -184,7 +184,7 @@ export interface SystemHealth {
 
 export interface SwingCandidate {
   id: number;
-  market: "US" | "BD";
+  market: AssetMarket;
   symbol: string;
   asset_name: string;
   sector: string;
@@ -224,7 +224,7 @@ export interface SwingCandidate {
 
 export interface PortfolioPosition {
   id: number;
-  market: "US" | "BD";
+  market: AssetMarket;
   symbol: string;
   currency: string;
   side: string;
@@ -256,6 +256,8 @@ export interface RiskPolicy {
   updated_at: string;
 }
 
+export type AssetMarket = "US" | "BD" | "COMMODITIES" | "CRYPTO" | "FOREX";
+
 export interface MarketCalendarStatus {
   us: {
     market: string;
@@ -275,6 +277,34 @@ export interface MarketCalendarStatus {
     timezone: string;
     price_circuit_limit: string;
     regulatory_framework: string;
+  };
+  commodities?: {
+    market: string;
+    exchange: string;
+    is_open: boolean;
+    current_session: string;
+    schedule: string;
+    timezone: string;
+    contract_specs: string;
+  };
+  crypto?: {
+    market: string;
+    exchange: string;
+    is_open: boolean;
+    current_session: string;
+    schedule: string;
+    timezone: string;
+    price_circuit_limit: string;
+    funding_cycle: string;
+  };
+  forex?: {
+    market: string;
+    exchange: string;
+    is_open: boolean;
+    current_session: string;
+    schedule: string;
+    timezone: string;
+    settlement: string;
   };
 }
 
@@ -333,3 +363,72 @@ export interface AuditTrailItem {
   details: Record<string, unknown>;
   timestamp: string;
 }
+
+export interface ModelStatus {
+  model_name: string;
+  model_version: string;
+  architecture: string;
+  features_used: string[];
+  feature_count: number;
+  training_benchmarks: string[];
+  training_samples: number;
+  validation_brier_score: number;
+  empirical_optimal_threshold: number;
+  calibration_method: string;
+  transaction_cost_model: {
+    US_round_trip: string;
+    BD_round_trip: string;
+  };
+  last_trained_at: string;
+  status: string;
+}
+
+export interface BacktestSummary {
+  total_trades_analyzed: number;
+  average_win_rate_pct: number;
+  average_brier_score: number;
+  average_profit_factor: number;
+  strategy_mean_sharpe: number;
+  benchmark_mean_sharpe: number;
+  average_max_drawdown_pct: number;
+  average_strategy_cumulative_pct: number;
+  average_benchmark_cumulative_pct: number;
+  empirical_calibrated_threshold: number;
+  friction_us: string;
+  friction_bd: string;
+}
+
+export interface BacktestSymbolResult {
+  symbol: string;
+  market: string;
+  currency: string;
+  holding_days: number;
+  trades_taken: number;
+  win_count: number;
+  loss_count: number;
+  win_rate_pct: number;
+  brier_score: number;
+  profit_factor: number;
+  avg_trade_return_pct: number;
+  strategy_cumulative_pct: number;
+  benchmark_cumulative_pct: number;
+  strategy_sharpe: number;
+  benchmark_sharpe: number;
+  max_drawdown_pct: number;
+  transaction_friction_applied: string;
+  empirical_threshold_used: number;
+  regime_breakdown: Record<string, {
+    trades: number;
+    win_rate: number;
+    total_return_pct: number;
+  }>;
+}
+
+export interface BacktestResponse {
+  market_filter: string;
+  generated_at: string;
+  strategy: string;
+  summary: BacktestSummary;
+  symbols_tested: BacktestSymbolResult[];
+}
+

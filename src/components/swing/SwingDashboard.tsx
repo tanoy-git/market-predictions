@@ -6,7 +6,10 @@ import {
   MarketCalendarStatus,
   AuditTrailItem,
   TradingAnalysisStyle,
-  ANALYSIS_STYLE_OPTIONS
+  ANALYSIS_STYLE_OPTIONS,
+  ModelStatus,
+  BacktestResponse,
+  AssetMarket
 } from "../../types/api";
 import {
   fetchSwingCandidates,
@@ -20,7 +23,9 @@ import {
   fetchRiskPolicy,
   updateRiskPolicy,
   fetchMarketCalendars,
-  fetchAuditTrail
+  fetchAuditTrail,
+  fetchSwingModelStatus,
+  fetchSwingBacktest
 } from "../../services/api";
 import {
   Shield,
@@ -40,12 +45,15 @@ import {
   AlertOctagon,
   Percent,
   Check,
-  Info
+  Info,
+  Cpu,
+  BarChart2,
+  RefreshCw
 } from "lucide-react";
 
 export const SwingDashboard: React.FC = () => {
-  const [activeMarket, setActiveMarket] = useState<"US" | "BD">("US");
-  const [activeTab, setActiveTab] = useState<"CANDIDATES" | "RISK" | "PORTFOLIO" | "REGULATORY" | "AUDIT">("CANDIDATES");
+  const [activeMarket, setActiveMarket] = useState<AssetMarket>("US");
+  const [activeTab, setActiveTab] = useState<"CANDIDATES" | "RISK" | "VALIDATION" | "PORTFOLIO" | "REGULATORY" | "AUDIT">("CANDIDATES");
   const [candidateFilter, setCandidateFilter] = useState<"ALL" | "BUY" | "APPROVED_REVIEW" | "USER_APPROVED">("ALL");
   const [selectedStyle, setSelectedStyle] = useState<TradingAnalysisStyle>("ALL");
 
@@ -54,6 +62,11 @@ export const SwingDashboard: React.FC = () => {
   const [riskPolicy, setRiskPolicy] = useState<RiskPolicy | null>(null);
   const [calendars, setCalendars] = useState<MarketCalendarStatus | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditTrailItem[]>([]);
+
+  // ML Ensemble & Backtest state
+  const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
+  const [backtestData, setBacktestData] = useState<BacktestResponse | null>(null);
+  const [isLoadingBacktest, setIsLoadingBacktest] = useState<boolean>(false);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
@@ -106,9 +119,32 @@ export const SwingDashboard: React.FC = () => {
     }
   }, [activeMarket]);
 
+  const loadBacktestData = useCallback(async (forceRefresh: boolean = false) => {
+    setIsLoadingBacktest(true);
+    try {
+      const [statusRes, backtestRes] = await Promise.all([
+        fetchSwingModelStatus(),
+        fetchSwingBacktest(activeMarket, forceRefresh)
+      ]);
+      setModelStatus(statusRes);
+      setBacktestData(backtestRes);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showBanner(`Failed to load model backtest: ${msg}`, "error");
+    } finally {
+      setIsLoadingBacktest(false);
+    }
+  }, [activeMarket]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (activeTab === "VALIDATION") {
+      loadBacktestData(false);
+    }
+  }, [activeTab, loadBacktestData]);
 
   // Handlers
   const handleTriggerScan = async () => {
@@ -182,8 +218,20 @@ export const SwingDashboard: React.FC = () => {
     setExecutingCandidate(cand);
     setExecPrice(cand.current_price);
     setExecQty(cand.suggested_shares);
-    setExecBroker(activeMarket === "US" ? "Interactive Brokers / Charles Schwab" : "EBL Securities / LankaBangla (DSE)");
-    setExecFees(activeMarket === "US" ? 1.0 : 150.0);
+    const broker =
+      cand.market === "US" ? "Interactive Brokers / Charles Schwab" :
+      cand.market === "BD" ? "EBL Securities / LankaBangla (DSE)" :
+      cand.market === "COMMODITIES" ? "CME Futures Broker / NinjaTrader" :
+      cand.market === "CRYPTO" ? "Coinbase Advanced / Kraken / Binance" :
+      "OANDA / Interactive Brokers FX";
+    const fees =
+      cand.market === "US" ? 1.0 :
+      cand.market === "BD" ? 150.0 :
+      cand.market === "COMMODITIES" ? 2.5 :
+      cand.market === "CRYPTO" ? 0.5 :
+      0.0;
+    setExecBroker(broker);
+    setExecFees(fees);
     setExecNotes("Executed manually in broker terminal outside AI.");
   };
 
@@ -263,8 +311,13 @@ export const SwingDashboard: React.FC = () => {
     return true;
   });
 
-  const currencySymbol = activeMarket === "US" ? "$" : "BDT ";
-  const activeCalendar = activeMarket === "US" ? calendars?.us : calendars?.bd;
+  const currencySymbol = activeMarket === "BD" ? "BDT " : (activeMarket === "FOREX" ? "" : "$");
+  const activeCalendar = 
+    activeMarket === "US" ? calendars?.us :
+    activeMarket === "BD" ? calendars?.bd :
+    activeMarket === "COMMODITIES" ? calendars?.commodities :
+    activeMarket === "CRYPTO" ? calendars?.crypto :
+    calendars?.forex;
 
   return (
     <div className="space-y-6">
@@ -285,45 +338,81 @@ export const SwingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TOP CONTROL BAR: Market Switcher, Session Status & Rescan */}
+      {/* TOP CONTROL BAR: Multi-Asset Class Switcher, Session Status & Rescan */}
       <div className="bg-terminal-card border border-terminal-border p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center space-x-3 w-full md:w-auto">
-          {/* US / BD Market Toggle */}
-          <div className="inline-flex p-1 bg-terminal-bg rounded-xl border border-terminal-border">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {/* Multi-Asset Class Switcher */}
+          <div className="inline-flex flex-wrap p-1 bg-terminal-bg rounded-xl border border-terminal-border gap-1">
             <button
               onClick={() => setActiveMarket("US")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-2 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-1.5 ${
                 activeMarket === "US"
                   ? "bg-sky-500/20 text-sky-300 border border-sky-500/60 shadow-md shadow-sky-500/10"
                   : "text-terminal-dim hover:text-white"
               }`}
             >
               <span>🇺🇸 US Equities</span>
-              <span className="text-[10px] bg-sky-500/20 px-1.5 py-0.5 rounded text-sky-300">NYSE/NASDAQ</span>
+              <span className="text-[10px] bg-sky-500/20 px-1 py-0.2 rounded text-sky-300">NYSE/NASDAQ</span>
             </button>
 
             <button
               onClick={() => setActiveMarket("BD")}
-              className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-2 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-1.5 ${
                 activeMarket === "BD"
                   ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-md shadow-emerald-500/10"
                   : "text-terminal-dim hover:text-white"
               }`}
             >
-              <span>🇧🇩 Bangladesh Equities</span>
-              <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-300">DSE</span>
+              <span>🇧🇩 BD Equities</span>
+              <span className="text-[10px] bg-emerald-500/20 px-1 py-0.2 rounded text-emerald-300">DSE</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMarket("CRYPTO")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-1.5 ${
+                activeMarket === "CRYPTO"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/60 shadow-md shadow-amber-500/10"
+                  : "text-terminal-dim hover:text-white"
+              }`}
+            >
+              <span>🪙 Crypto</span>
+              <span className="text-[10px] bg-amber-500/20 px-1 py-0.2 rounded text-amber-300">24/7 Spot</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMarket("COMMODITIES")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-1.5 ${
+                activeMarket === "COMMODITIES"
+                  ? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/60 shadow-md shadow-yellow-500/10"
+                  : "text-terminal-dim hover:text-white"
+              }`}
+            >
+              <span>🥇 Commodities</span>
+              <span className="text-[10px] bg-yellow-500/20 px-1 py-0.2 rounded text-yellow-300">Gold / Oil</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMarket("FOREX")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-1.5 ${
+                activeMarket === "FOREX"
+                  ? "bg-purple-500/20 text-purple-300 border border-purple-500/60 shadow-md shadow-purple-500/10"
+                  : "text-terminal-dim hover:text-white"
+              }`}
+            >
+              <span>💱 Forex</span>
+              <span className="text-[10px] bg-purple-500/20 px-1 py-0.2 rounded text-purple-300">FX / BDT</span>
             </button>
           </div>
 
           {/* Session Clock Badge */}
           {activeCalendar && (
-            <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-terminal-bg border border-terminal-border font-mono text-xs">
+            <div className="hidden xl:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-terminal-bg border border-terminal-border font-mono text-xs">
               <span
                 className={`h-2 w-2 rounded-full ${
                   activeCalendar.is_open ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
                 }`}
               />
-              <span className="text-terminal-dim">{activeMarket === "US" ? "EST Session:" : "BST Session:"}</span>
+              <span className="text-terminal-dim">{activeMarket} Session:</span>
               <span className={activeCalendar.is_open ? "text-emerald-300 font-bold" : "text-amber-300"}>
                 {activeCalendar.current_session}
               </span>
@@ -439,6 +528,18 @@ export const SwingDashboard: React.FC = () => {
         >
           <Shield className="h-4 w-4" />
           <span>🛡️ Independent Risk Engine</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("VALIDATION")}
+          className={`px-4 py-2 rounded-lg font-bold transition flex items-center space-x-2 whitespace-nowrap ${
+            activeTab === "VALIDATION"
+              ? "bg-purple-500/20 text-purple-300 border border-purple-500/60 shadow-sm"
+              : "text-terminal-dim hover:text-white hover:bg-terminal-cardHover"
+          }`}
+        >
+          <Cpu className="h-4 w-4" />
+          <span>🔬 Walk-Forward Backtest &amp; ML Ensemble</span>
         </button>
 
         <button
@@ -604,7 +705,7 @@ export const SwingDashboard: React.FC = () => {
                         <div className="bg-terminal-bg p-2 rounded-lg border border-terminal-border">
                           <span className="text-[10px] text-rose-400 block font-semibold">STOP-LOSS</span>
                           <span className="font-bold text-rose-400">
-                            {currencySymbol}{c.stop_loss.toFixed(2)}
+                            {c.currency === "BDT" ? "BDT " : (c.currency === "USD" ? "$" : "")}{c.stop_loss.toFixed(2)}
                           </span>
                           <span className="text-[9px] text-terminal-muted block">
                             (-{(((c.current_price - c.stop_loss) / c.current_price) * 100).toFixed(1)}%)
@@ -614,7 +715,7 @@ export const SwingDashboard: React.FC = () => {
                         <div className="bg-terminal-bg p-2 rounded-lg border border-terminal-border">
                           <span className="text-[10px] text-emerald-400 block font-semibold">TARGET (R:R {c.reward_risk_ratio}x)</span>
                           <span className="font-bold text-emerald-400">
-                            {currencySymbol}{c.target_price.toFixed(2)}
+                            {c.currency === "BDT" ? "BDT " : (c.currency === "USD" ? "$" : "")}{c.target_price.toFixed(2)}
                           </span>
                           <span className="text-[9px] text-emerald-400/80 block">
                             (+{c.expected_return_pct.toFixed(1)}% net)
@@ -629,13 +730,19 @@ export const SwingDashboard: React.FC = () => {
                           <span className="font-bold text-white text-sm">
                             {c.suggested_shares > 0 ? (
                               <>
-                                {c.suggested_shares} Shares{" "}
+                                {c.market === "CRYPTO"
+                                  ? `${c.suggested_shares.toFixed(4)} Coins`
+                                  : c.market === "COMMODITIES"
+                                  ? `${c.suggested_shares} Contracts`
+                                  : c.market === "FOREX"
+                                  ? `${c.suggested_shares.toFixed(2)} Lots`
+                                  : `${Math.round(c.suggested_shares)} Shares`}{" "}
                                 <span className="text-terminal-dim text-[11px] font-normal">
-                                  ({currencySymbol}{c.allocated_capital.toLocaleString()})
+                                  ({c.currency === "BDT" ? "BDT " : (c.currency === "USD" ? "$" : "")}{c.allocated_capital.toLocaleString()})
                                 </span>
                               </>
                             ) : (
-                              <span className="text-terminal-muted text-xs">0 Shares (Risk Rejection)</span>
+                              <span className="text-terminal-muted text-xs">0 (Risk Rejection)</span>
                             )}
                           </span>
                         </div>
@@ -940,6 +1047,218 @@ export const SwingDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 3: WALK-FORWARD BACKTEST & ML ENSEMBLE VALIDATION (MA-MAP v3.0)        */}
+      {/* ========================================================================= */}
+      {activeTab === "VALIDATION" && (
+        <div className="space-y-6 font-mono">
+          {/* Header & Refresh Strip */}
+          <div className="bg-terminal-card border border-terminal-border p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-bold text-white uppercase tracking-wider">
+                  Out-of-Sample Walk-Forward Validation Engine
+                </span>
+                <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/40">
+                  Zero Lookahead Bias
+                </span>
+              </div>
+              <p className="text-terminal-dim text-xs mt-1">
+                Strict rolling historical window evaluation across {activeMarket} universe. Features computed only from past data; trades evaluated net of commissions, spread, and slippage.
+              </p>
+            </div>
+
+            <button
+              onClick={() => loadBacktestData(true)}
+              disabled={isLoadingBacktest}
+              className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center space-x-2 border border-purple-400/40 shadow-lg shadow-purple-600/20 transition"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoadingBacktest ? "animate-spin" : ""}`} />
+              <span>{isLoadingBacktest ? "Running Walk-Forward..." : "Re-Run Walk-Forward Backtest"}</span>
+            </button>
+          </div>
+
+          {/* Model Architecture & Calibration Specifications */}
+          {modelStatus && (
+            <div className="bg-terminal-card border border-terminal-border p-6 rounded-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+                  <Cpu className="h-4 w-4 text-purple-400" />
+                  <span>Dual-Model ML Ensemble Architecture &amp; Calibration</span>
+                </h3>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/50 font-bold">
+                  {modelStatus.status} • {modelStatus.model_version}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="bg-terminal-bg p-3.5 rounded-xl border border-terminal-border space-y-1">
+                  <span className="text-[10px] text-terminal-muted block">PREDICTION PIPELINE</span>
+                  <span className="font-bold text-white block text-[11px]">
+                    LightGBM (120 Trees) + Logistic Regression Baseline
+                  </span>
+                  <span className="text-terminal-dim text-[10px] block">
+                    Features: {modelStatus.feature_count} technical, momentum, volatility &amp; volume drivers
+                  </span>
+                </div>
+
+                <div className="bg-terminal-bg p-3.5 rounded-xl border border-terminal-border space-y-1">
+                  <span className="text-[10px] text-terminal-muted block">PROBABILITY CALIBRATION</span>
+                  <span className="font-bold text-emerald-300 block text-[11px]">
+                    Platt Scaling (Sigmoid CalibratedClassifierCV)
+                  </span>
+                  <span className="text-terminal-dim text-[10px] block">
+                    Validation Brier Score: {modelStatus.validation_brier_score.toFixed(4)} (Well Calibrated)
+                  </span>
+                </div>
+
+                <div className="bg-terminal-bg p-3.5 rounded-xl border border-terminal-border space-y-1">
+                  <span className="text-[10px] text-terminal-muted block">DATA-DRIVEN THRESHOLD &amp; FRICTION</span>
+                  <span className="font-bold text-sky-300 block text-[11px]">
+                    Empirical Threshold: {(modelStatus.empirical_optimal_threshold * 100).toFixed(1)}%
+                  </span>
+                  <span className="text-terminal-dim text-[10px] block">
+                    US Friction: {modelStatus.transaction_cost_model.US_round_trip} • BD: {modelStatus.transaction_cost_model.BD_round_trip}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Walk-Forward Summary Metrics */}
+          {backtestData && backtestData.summary && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-terminal-card border border-terminal-border p-4 rounded-xl">
+                  <span className="text-[10px] text-terminal-muted block">TRADES ANALYZED</span>
+                  <span className="text-xl font-black text-white">{backtestData.summary.total_trades_analyzed}</span>
+                  <span className="text-[10px] text-terminal-dim block mt-0.5">Out-of-sample swing cycles</span>
+                </div>
+
+                <div className="bg-terminal-card border border-terminal-border p-4 rounded-xl">
+                  <span className="text-[10px] text-terminal-muted block">WIN RATE %</span>
+                  <span className={`text-xl font-black ${backtestData.summary.average_win_rate_pct >= 50 ? "text-emerald-400" : "text-amber-400"}`}>
+                    {backtestData.summary.average_win_rate_pct.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] text-terminal-dim block mt-0.5">Directional hit rate</span>
+                </div>
+
+                <div className="bg-terminal-card border border-terminal-border p-4 rounded-xl">
+                  <span className="text-[10px] text-terminal-muted block">PROFIT FACTOR</span>
+                  <span className={`text-xl font-black ${backtestData.summary.average_profit_factor >= 1.0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {backtestData.summary.average_profit_factor.toFixed(2)}x
+                  </span>
+                  <span className="text-[10px] text-terminal-dim block mt-0.5">Gross gains / gross losses</span>
+                </div>
+
+                <div className="bg-terminal-card border border-terminal-border p-4 rounded-xl">
+                  <span className="text-[10px] text-terminal-muted block">CALIBRATION BRIER SCORE</span>
+                  <span className="text-xl font-black text-purple-300">
+                    {backtestData.summary.average_brier_score.toFixed(4)}
+                  </span>
+                  <span className="text-[10px] text-terminal-dim block mt-0.5">0.0 = perfect calibration</span>
+                </div>
+              </div>
+
+              {/* Symbol-by-Symbol Walk-Forward Results Table */}
+              <div className="bg-terminal-card border border-terminal-border p-6 rounded-2xl space-y-4 overflow-hidden">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+                  <BarChart2 className="h-4 w-4 text-sky-400" />
+                  <span>Out-of-Sample Performance by Symbol (Net of Costs)</span>
+                </h3>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-terminal-bg text-terminal-muted border-b border-terminal-border text-[10px] uppercase">
+                      <tr>
+                        <th className="p-3">Symbol</th>
+                        <th className="p-3">Trades</th>
+                        <th className="p-3">Win Rate</th>
+                        <th className="p-3">Brier Score</th>
+                        <th className="p-3">Profit Factor</th>
+                        <th className="p-3">Avg Return</th>
+                        <th className="p-3">Strategy Net P&amp;L</th>
+                        <th className="p-3">Strategy Sharpe</th>
+                        <th className="p-3">Max DD</th>
+                        <th className="p-3">Regime Breakdown</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-terminal-border/60">
+                      {backtestData.symbols_tested.map((s, idx) => (
+                        <tr key={idx} className="hover:bg-terminal-bg/50 transition">
+                          <td className="p-3 font-bold text-white">{s.symbol}</td>
+                          <td className="p-3 text-terminal-dim">{s.trades_taken}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${s.win_rate_pct >= 50 ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>
+                              {s.win_rate_pct.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="p-3 text-purple-300">{s.brier_score.toFixed(4)}</td>
+                          <td className="p-3 font-bold text-white">{s.profit_factor.toFixed(2)}x</td>
+                          <td className={`p-3 font-bold ${s.avg_trade_return_pct >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            {s.avg_trade_return_pct >= 0 ? "+" : ""}{s.avg_trade_return_pct.toFixed(2)}%
+                          </td>
+                          <td className={`p-3 font-bold ${s.strategy_cumulative_pct >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            {s.strategy_cumulative_pct >= 0 ? "+" : ""}{s.strategy_cumulative_pct.toFixed(1)}%
+                          </td>
+                          <td className="p-3 text-sky-300 font-bold">{s.strategy_sharpe.toFixed(2)}</td>
+                          <td className="p-3 text-rose-400">{s.max_drawdown_pct.toFixed(1)}%</td>
+                          <td className="p-3 text-[10px] text-terminal-dim">
+                            {Object.entries(s.regime_breakdown).map(([r, stats]) => (
+                              stats.trades > 0 && (
+                                <span key={r} className="inline-block mr-2 px-1.5 py-0.5 bg-terminal-bg rounded border border-terminal-border/60">
+                                  {r.replace("TRENDING_", "").replace("_CONSOLIDATION", "")}: {stats.win_rate}% ({stats.trades}t)
+                                </span>
+                              )
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Market Microstructure Transparency Panel */}
+          <div className="bg-terminal-card border border-terminal-border p-6 rounded-2xl space-y-3">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+              <Info className="h-4 w-4 text-sky-400" />
+              <span>Dual-Market Data Source &amp; Microstructure Transparency</span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="bg-terminal-bg p-4 rounded-xl border border-terminal-border space-y-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-base">🇺🇸</span>
+                  <span className="font-bold text-white">US Equities (NYSE / NASDAQ)</span>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/40">
+                    Live Real-Time Stream
+                  </span>
+                </div>
+                <p className="text-terminal-dim text-[11px]">
+                  Real-time OHLCV candles retrieved over direct internet API from Yahoo Finance v8 Chart API and institutional financial gateways. Deducts 0.35% round-trip friction (commission + half-spread + slippage).
+                </p>
+              </div>
+
+              <div className="bg-terminal-bg p-4 rounded-xl border border-terminal-border space-y-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-base">🇧🇩</span>
+                  <span className="font-bold text-white">Bangladesh Equities (DSE)</span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40">
+                    Calibrated Simulation Microstructure
+                  </span>
+                </div>
+                <p className="text-terminal-dim text-[11px]">
+                  Calibrated price series reflecting Dhaka Stock Exchange market microstructure: Sunday–Thursday trading calendar, 10% daily circuit breakers, local turnover dynamics, and 0.75% transaction friction. Live broker execution requires DSE-authorized gateway and BSEC compliance.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB 3: BROKER EXECUTION TRACKER & PORTFOLIO                             */}
       {/* ========================================================================= */}
       {activeTab === "PORTFOLIO" && (
@@ -1090,9 +1409,6 @@ export const SwingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 5: IMMUTABLE AUDIT LOG                                              */}
-      {/* ========================================================================= */}
       {activeTab === "AUDIT" && (
         <div className="bg-terminal-card border border-terminal-border rounded-2xl overflow-hidden font-mono text-xs">
           <div className="p-4 border-b border-terminal-border bg-terminal-bg/40 flex items-center justify-between">
@@ -1133,10 +1449,6 @@ export const SwingDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODALS: EDIT PARAMETERS, MANUAL EXECUTION, REJECT REASON                 */}
-      {/* ========================================================================= */}
-
       {/* Edit Parameters Modal */}
       {editingCandidate && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1170,11 +1482,14 @@ export const SwingDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-terminal-muted block text-[11px]">SUGGESTED SHARES:</label>
+                <label className="text-terminal-muted block text-[11px]">
+                  SUGGESTED UNITS ({editingCandidate.market === "CRYPTO" ? "Coins" : editingCandidate.market === "COMMODITIES" ? "Contracts" : editingCandidate.market === "FOREX" ? "Lots" : "Shares"}):
+                </label>
                 <input
                   type="number"
+                  step="any"
                   value={editShares}
-                  onChange={(e) => setEditShares(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setEditShares(parseFloat(e.target.value) || 0)}
                   className="w-full mt-1 bg-terminal-bg border border-terminal-border p-2 rounded text-white"
                 />
               </div>
@@ -1234,11 +1549,14 @@ export const SwingDashboard: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-terminal-muted block text-[11px]">QUANTITY (SHARES):</label>
+                  <label className="text-terminal-muted block text-[11px]">
+                    QUANTITY ({executingCandidate.market === "CRYPTO" ? "Coins" : executingCandidate.market === "COMMODITIES" ? "Contracts" : executingCandidate.market === "FOREX" ? "Lots" : "Shares"}):
+                  </label>
                   <input
                     type="number"
+                    step="any"
                     value={execQty}
-                    onChange={(e) => setExecQty(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setExecQty(parseFloat(e.target.value) || 0)}
                     className="w-full mt-1 bg-terminal-bg border border-terminal-border p-2 rounded text-white"
                   />
                 </div>
@@ -1320,6 +1638,7 @@ export const SwingDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

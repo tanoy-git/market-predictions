@@ -10,6 +10,8 @@ import {
   RiskPolicy,
   MarketCalendarStatus,
   AuditTrailItem,
+  ModelStatus,
+  BacktestResponse,
 } from "../types/api";
 
 const getBaseUrl = (): string => {
@@ -202,3 +204,12 @@ export async function fetchMarketCalendars(): Promise<MarketCalendarStatus> {
 export async function fetchAuditTrail(limit: number = 50): Promise<AuditTrailItem[]> {
   return request<AuditTrailItem[]>(`/swing/audit?limit=${limit}`);
 }
+
+export async function fetchSwingModelStatus(): Promise<ModelStatus> {
+  return request<ModelStatus>("/swing/model-status");
+}
+
+export async function fetchSwingBacktest(market: string = "ALL", refresh: boolean = false): Promise<BacktestResponse> {
+  return request<BacktestResponse>(`/swing/backtest?market=${market}&refresh=${refresh}`);
+}
+
