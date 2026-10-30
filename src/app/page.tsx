@@ -10,6 +10,7 @@ import { WatchlistDrawer } from "../components/WatchlistDrawer";
 import { AuditLogModal } from "../components/AuditLogModal";
 import { ComplianceFooter } from "../components/ComplianceFooter";
 import { SkeletonLoader } from "../components/SkeletonLoader";
+import { SwingDashboard } from "../components/swing/SwingDashboard";
 import { 
   fetchPrediction, 
   fetchWatchlist, 
@@ -25,6 +26,7 @@ import {
 import { AlertCircle, RefreshCw } from "lucide-react";
 
 export default function Home() {
+  const [activePlatformTab, setActivePlatformTab] = useState<"PREDICTIONS" | "SWING_TRADING">("PREDICTIONS");
   const [ticker, setTicker] = useState<string>("AAPL");
   const [timeframe, setTimeframe] = useState<string>("1y");
   const [predictionData, setPredictionData] = useState<PredictionResponse | null>(null);
@@ -136,72 +138,114 @@ export default function Home() {
 
       {/* Main Terminal Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Asset Class & Ticker Switcher */}
-        <AssetSelector
-          currentTicker={ticker}
-          currentTimeframe={timeframe}
-          onSelectTicker={(newTicker) => setTicker(newTicker)}
-          onSelectTimeframe={(newTf) => setTimeframe(newTf)}
-          isLoading={isLoading}
-        />
-
-        {/* Error Alert Display */}
-        {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-center justify-between text-rose-400 font-mono text-xs">
-            <div className="flex items-center space-x-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
+        {/* TOP-LEVEL PLATFORM ARCHITECTURE SELECTOR */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-terminal-border/80 pb-4">
+          <div className="flex items-center space-x-2 bg-terminal-card p-1 rounded-xl border border-terminal-border shadow-lg">
             <button
-              onClick={() => loadPrediction(ticker, timeframe)}
-              className="px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 rounded border border-rose-500/40 text-white font-bold transition flex items-center space-x-1"
+              onClick={() => setActivePlatformTab("PREDICTIONS")}
+              className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-2 ${
+                activePlatformTab === "PREDICTIONS"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-md shadow-emerald-500/10"
+                  : "text-terminal-dim hover:text-white"
+              }`}
             >
-              <RefreshCw className="h-3 w-3" />
-              <span>Retry</span>
+              <span>🔮 Multi-Asset Predictions &amp; Analytics</span>
+            </button>
+
+            <button
+              onClick={() => setActivePlatformTab("SWING_TRADING")}
+              className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition flex items-center space-x-2 ${
+                activePlatformTab === "SWING_TRADING"
+                  ? "bg-sky-500/20 text-sky-300 border border-sky-500/60 shadow-md shadow-sky-500/10"
+                  : "text-terminal-dim hover:text-white"
+              }`}
+            >
+              <span>⚖️ Dual-Market Swing Trading &amp; Risk Support</span>
+              <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded border border-sky-500/40 uppercase">
+                US &amp; DSE
+              </span>
             </button>
           </div>
-        )}
 
-        {/* Content Loading State */}
-        {isLoading && !predictionData ? (
-          <SkeletonLoader />
-        ) : predictionData ? (
-          <div className="space-y-6">
-            {/* Quantitative Metrics Grid */}
-            <MetricsGrid
-              metrics={predictionData.metrics}
-              currentPrice={predictionData.current_price}
-              currency={predictionData.currency}
+          <div className="text-[11px] font-mono text-terminal-muted hidden sm:block">
+            {activePlatformTab === "PREDICTIONS"
+              ? "Institutional Multi-Horizon Forecasts • Live ECN Feed"
+              : "Human-in-the-Loop • Independent Risk Engine • US & DSE"}
+          </div>
+        </div>
+
+        {activePlatformTab === "SWING_TRADING" ? (
+          <SwingDashboard />
+        ) : (
+          <>
+            {/* Asset Class & Ticker Switcher */}
+            <AssetSelector
+              currentTicker={ticker}
+              currentTimeframe={timeframe}
+              onSelectTicker={(newTicker) => setTicker(newTicker)}
+              onSelectTimeframe={(newTf) => setTimeframe(newTf)}
+              isLoading={isLoading}
             />
 
-            {/* AI QUANT PREDICTION ENGINE - Prominent High-Visibility Centerpiece */}
-            <div className="w-full">
-              <PredictionCard
-                prediction={predictionData.prediction}
-                probability={predictionData.probability}
-                sentimentScore={predictionData.sentiment_score}
-                currentPrice={predictionData.current_price}
-                currency={predictionData.currency}
-                factors={predictionData.factors}
-                horizons={predictionData.horizons}
-                macroRegime={predictionData.macro_regime}
-                seasonality={predictionData.seasonality}
-                advancedQuant={predictionData.advanced_quant}
-                timestamp={predictionData.timestamp}
-              />
-            </div>
+            {/* Error Alert Display */}
+            {error && (
+              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-center justify-between text-rose-400 font-mono text-xs">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  onClick={() => loadPrediction(ticker, timeframe)}
+                  className="px-3 py-1 bg-rose-500/20 hover:bg-rose-500/30 rounded border border-rose-500/40 text-white font-bold transition flex items-center space-x-1"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  <span>Retry</span>
+                </button>
+              </div>
+            )}
 
-            {/* Interactive Institutional Financial Chart */}
-            <div className="w-full">
-              <TradingChart
-                data={predictionData.history || []}
-                ticker={predictionData.ticker}
-                assetName={predictionData.asset_name}
-                currency={predictionData.currency}
-              />
-            </div>
-          </div>
-        ) : null}
+            {/* Content Loading State */}
+            {isLoading && !predictionData ? (
+              <SkeletonLoader />
+            ) : predictionData ? (
+              <div className="space-y-6">
+                {/* Quantitative Metrics Grid */}
+                <MetricsGrid
+                  metrics={predictionData.metrics}
+                  currentPrice={predictionData.current_price}
+                  currency={predictionData.currency}
+                />
+
+                {/* AI QUANT PREDICTION ENGINE - Prominent High-Visibility Centerpiece */}
+                <div className="w-full">
+                  <PredictionCard
+                    prediction={predictionData.prediction}
+                    probability={predictionData.probability}
+                    sentimentScore={predictionData.sentiment_score}
+                    currentPrice={predictionData.current_price}
+                    currency={predictionData.currency}
+                    factors={predictionData.factors}
+                    horizons={predictionData.horizons}
+                    macroRegime={predictionData.macro_regime}
+                    seasonality={predictionData.seasonality}
+                    advancedQuant={predictionData.advanced_quant}
+                    timestamp={predictionData.timestamp}
+                  />
+                </div>
+
+                {/* Interactive Institutional Financial Chart */}
+                <div className="w-full">
+                  <TradingChart
+                    data={predictionData.history || []}
+                    ticker={predictionData.ticker}
+                    assetName={predictionData.asset_name}
+                    currency={predictionData.currency}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
       </main>
 
       {/* Watchlist Side Drawer */}

@@ -181,3 +181,155 @@ export interface SystemHealth {
     };
   };
 }
+
+export interface SwingCandidate {
+  id: number;
+  market: "US" | "BD";
+  symbol: string;
+  asset_name: string;
+  sector: string;
+  currency: string;
+  direction: "BULLISH" | "BEARISH" | "NEUTRAL";
+  recommendation: "BUY candidate" | "HOLD" | "AVOID" | "EXIT candidate";
+  horizon: string;
+  holding_days: number;
+  current_price: number;
+  entry_low: number;
+  entry_high: number;
+  stop_loss: number;
+  target_price: number;
+  reward_risk_ratio: number;
+  expected_return_pct: number;
+  calibrated_probability: number;
+  atr_14: number;
+  turnover_20d: number;
+  liquidity_status: "PASS" | "FAIL";
+  suggested_shares: number;
+  allocated_capital: number;
+  risk_amount: number;
+  risk_status: "APPROVED_FOR_REVIEW" | "REJECTED";
+  risk_rejection_reasons: string[];
+  risk_checks_passed: Record<string, boolean>;
+  supporting_factors: string[];
+  opposing_factors: string[];
+  invalidation_rules: string[];
+  model_version: string;
+  approval_status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "EXECUTED" | "EXPIRED";
+  user_decision_time?: string | null;
+  user_notes?: string | null;
+  edited_by_user: boolean;
+  expiry?: string | null;
+  created_at: string;
+}
+
+export interface PortfolioPosition {
+  id: number;
+  market: "US" | "BD";
+  symbol: string;
+  currency: string;
+  side: string;
+  quantity: number;
+  entry_price: number;
+  current_price: number;
+  stop_loss: number;
+  target_price: number;
+  broker_name: string;
+  status: "OPEN" | "CLOSED";
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  realized_pnl: number;
+  execution_time: string;
+  closed_at?: string | null;
+}
+
+export interface RiskPolicy {
+  equity_usd: number;
+  equity_bdt: number;
+  risk_per_trade_pct: number;
+  max_open_risk_pct: number;
+  max_stock_risk_pct: number;
+  min_reward_risk: number;
+  max_new_positions: number;
+  daily_loss_limit_pct: number;
+  weekly_loss_limit_pct: number;
+  kill_switch_active: boolean;
+  updated_at: string;
+}
+
+export interface MarketCalendarStatus {
+  us: {
+    market: string;
+    is_open: boolean;
+    current_session: string;
+    schedule: string;
+    timezone: string;
+    next_open: string;
+  };
+  bd: {
+    market: string;
+    exchange: string;
+    is_open: boolean;
+    current_session: string;
+    schedule: string;
+    weekend: string;
+    timezone: string;
+    price_circuit_limit: string;
+    regulatory_framework: string;
+  };
+}
+
+export type TradingAnalysisStyle =
+  | "ALL"
+  | "DAY_TRADING"
+  | "SWING_TRADING"
+  | "POSITION_TRADING"
+  | "LONG_TERM_INVESTING";
+
+export interface AnalysisStyleOption {
+  id: TradingAnalysisStyle;
+  label: string;
+  badge: string;
+  description: string;
+  icon: string;
+}
+
+export const ANALYSIS_STYLE_OPTIONS: AnalysisStyleOption[] = [
+  {
+    id: "DAY_TRADING",
+    label: "Day Trading",
+    badge: "intraday",
+    description: "Same-day execution; tight ATR stops; mandatory session close exit",
+    icon: "⚡"
+  },
+  {
+    id: "SWING_TRADING",
+    label: "Swing Trading",
+    badge: "1 day – 1 month",
+    description: "Multi-day wave capture; EMA alignment; 2:1+ reward-to-risk ratio",
+    icon: "🌊"
+  },
+  {
+    id: "POSITION_TRADING",
+    label: "Position Trading",
+    badge: "1 month – 1 year",
+    description: "Intermediate cycles; 50 EMA & 200 SMA support; macro regime confirmation",
+    icon: "🎯"
+  },
+  {
+    id: "LONG_TERM_INVESTING",
+    label: "Long-term Investing",
+    badge: "1 year+",
+    description: "Secular compounding; structural valuation floors; multi-quarter trends",
+    icon: "🏛️"
+  }
+];
+
+export interface AuditTrailItem {
+  id: number;
+  actor: string;
+  action: string;
+  reference_id?: string | null;
+  market: string;
+  details: Record<string, unknown>;
+  timestamp: string;
+}
