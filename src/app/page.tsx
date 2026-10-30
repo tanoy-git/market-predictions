@@ -184,6 +184,9 @@ export default function Home() {
                 currency={predictionData.currency}
                 factors={predictionData.factors}
                 horizons={predictionData.horizons}
+                macroRegime={predictionData.macro_regime}
+                seasonality={predictionData.seasonality}
+                advancedQuant={predictionData.advanced_quant}
                 timestamp={predictionData.timestamp}
               />
             </div>

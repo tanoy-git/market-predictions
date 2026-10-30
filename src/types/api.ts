@@ -57,6 +57,45 @@ export interface HorizonForecast {
   rationale: string;
 }
 
+export interface MacroRegimeMetrics {
+  yield_10y: number;
+  dxy_index: number;
+  vix_level: number;
+  crude_oil: number;
+  gold_price: number;
+  regime_classification: string;
+  macro_bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  macro_confidence: number;
+  interest_rate_impact: string;
+  dollar_impact: string;
+  inflation_shock_risk: string;
+}
+
+export interface SeasonalityMetrics {
+  current_month: string;
+  month_historical_win_rate: number;
+  month_avg_return_pct: number;
+  seasonal_bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  quarter_end_drift: string;
+  weather_climate_regime: string;
+  weather_sensitivity_score: number;
+  seasonal_cycle_summary: string;
+}
+
+export interface AdvancedQuantMetrics {
+  hurst_exponent: number;
+  hurst_regime: string;
+  ou_half_life_days: number;
+  ou_mean_level: number;
+  ewma_volatility: number;
+  var_95_daily: number;
+  var_99_daily: number;
+  cvar_95_daily: number;
+  skewness: number;
+  kurtosis: number;
+  jump_diffusion_prob: number;
+}
+
 export interface PredictionResponse {
   ticker: string;
   asset_name: string;
@@ -71,6 +110,9 @@ export interface PredictionResponse {
   disclaimer: string;
   factors?: FactorSignal[];
   horizons?: HorizonForecast[];
+  macro_regime?: MacroRegimeMetrics;
+  seasonality?: SeasonalityMetrics;
+  advanced_quant?: AdvancedQuantMetrics;
   history?: CandlePoint[];
 }
 
